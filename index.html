@@ -1,0 +1,315 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="Content-Style-Type" content="text/css">
+  <title></title>
+  <meta name="Generator" content="Cocoa HTML Writer">
+  <meta name="CocoaVersion" content="2575.6">
+  <style type="text/css">
+    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica}
+    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; min-height: 14.0px}
+  </style>
+</head>
+<body>
+<p class="p1">import React, { useState, useEffect } from 'react';</p>
+<p class="p1">import { initializeApp } from 'firebase/app';</p>
+<p class="p1">import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';</p>
+<p class="p1">import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';</p>
+<p class="p2"><br></p>
+<p class="p1">// Componente principal de la aplicación</p>
+<p class="p1">function App() {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const [db, setDb] = useState(null);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const [auth, setAuth] = useState(null);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const [userId, setUserId] = useState(null);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const [isAuthReady, setIsAuthReady] = useState(false);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>const [targetColor, setTargetColor] = useState(null);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const [selectedColors, setSelectedColors] = useState([]); // Stores up to two selected colors</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const [mixedColor, setMixedColor] = useState(null);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const [feedbackMessage, setFeedbackMessage] = useState('');</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const [feedbackType, setFeedbackType] = useState(''); // 'success' or 'error'</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>// Definition of primary and secondary colors</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const primaryColors = [</p>
+<p class="p1"><span class="Apple-converted-space">        </span>{ name: 'Rojo', hex: '#FF0000', id: 'red' },</p>
+<p class="p1"><span class="Apple-converted-space">        </span>{ name: 'Amarillo', hex: '#FFFF00', id: 'yellow' },</p>
+<p class="p1"><span class="Apple-converted-space">        </span>{ name: 'Azul', hex: '#0000FF', id: 'blue' },</p>
+<p class="p1"><span class="Apple-converted-space">    </span>];</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>const mixRules = {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>// Combinations for secondary colors</p>
+<p class="p1"><span class="Apple-converted-space">        </span>'red_yellow': { name: 'Naranja', hex: '#FFA500' },</p>
+<p class="p1"><span class="Apple-converted-space">        </span>'yellow_red': { name: 'Naranja', hex: '#FFA500' },</p>
+<p class="p1"><span class="Apple-converted-space">        </span>'blue_yellow': { name: 'Verde', hex: '#008000' },</p>
+<p class="p1"><span class="Apple-converted-space">        </span>'yellow_blue': { name: 'Verde', hex: '#008000' },</p>
+<p class="p1"><span class="Apple-converted-space">        </span>'red_blue': { name: 'Violeta', hex: '#800080' },</p>
+<p class="p1"><span class="Apple-converted-space">        </span>'blue_red': { name: 'Violeta', hex: '#800080' },</p>
+<p class="p1"><span class="Apple-converted-space">    </span>};</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>const secondaryColors = [</p>
+<p class="p1"><span class="Apple-converted-space">        </span>{ name: 'Naranja', hex: '#FFA500' },</p>
+<p class="p1"><span class="Apple-converted-space">        </span>{ name: 'Verde', hex: '#008000' },</p>
+<p class="p1"><span class="Apple-converted-space">        </span>{ name: 'Violeta', hex: '#800080' },</p>
+<p class="p1"><span class="Apple-converted-space">    </span>];</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>// useEffect to initialize Firebase and handle authentication</p>
+<p class="p1"><span class="Apple-converted-space">    </span>useEffect(() =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const initializeFirebase = async () =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>try {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>// Get Firebase config and App ID from the Canvas environment</p>
+<p class="p1"><span class="Apple-converted-space">                </span>const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');</p>
+<p class="p1"><span class="Apple-converted-space">                </span>const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">                </span>if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>console.warn("Firebase config is not defined. Firebase features will not be available.");</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>setIsAuthReady(true); // Allow the app to load even without Firebase</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>return;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">                </span>const firebaseApp = initializeApp(firebaseConfig);</p>
+<p class="p1"><span class="Apple-converted-space">                </span>const firestoreDb = getFirestore(firebaseApp);</p>
+<p class="p1"><span class="Apple-converted-space">                </span>const firebaseAuth = getAuth(firebaseApp);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">                </span>setDb(firestoreDb);</p>
+<p class="p1"><span class="Apple-converted-space">                </span>setAuth(firebaseAuth);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">                </span>// Authenticate the user</p>
+<p class="p1"><span class="Apple-converted-space">                </span>if (typeof __initial_auth_token !== 'undefined') {</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>await signInWithCustomToken(firebaseAuth, __initial_auth_token);</p>
+<p class="p1"><span class="Apple-converted-space">                </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>await signInAnonymously(firebaseAuth);</p>
+<p class="p1"><span class="Apple-converted-space">                </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">                </span>// Listener for authentication state changes</p>
+<p class="p1"><span class="Apple-converted-space">                </span>onAuthStateChanged(firebaseAuth, (user) =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>if (user) {</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>setUserId(user.uid);</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>console.log("Firebase Auth Ready. User ID:", user.uid);</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>setUserId(crypto.randomUUID()); // Use a random ID for unauthenticated users</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>console.log("Signed in anonymously or user not found. Using random ID.");</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>setIsAuthReady(true);</p>
+<p class="p1"><span class="Apple-converted-space">                </span>});</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>} catch (error) {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>console.error("Error initializing Firebase or authenticating:", error);</p>
+<p class="p1"><span class="Apple-converted-space">                </span>setIsAuthReady(true); // Allow the app to load despite Firebase error</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>};</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>initializeFirebase();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}, []); // Runs only once when the component mounts</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>// useEffect to generate a new challenge when authentication is ready</p>
+<p class="p1"><span class="Apple-converted-space">    </span>useEffect(() =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if (isAuthReady) {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>generateNewChallenge();</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}, [isAuthReady]); // Depends on isAuthReady</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>// Generates a new random target color (one of the secondary colors)</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const generateNewChallenge = () =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const randomIndex = Math.floor(Math.random() * secondaryColors.length);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>setTargetColor(secondaryColors[randomIndex]);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>setSelectedColors([]);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>setMixedColor(null);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>setFeedbackMessage('');</p>
+<p class="p1"><span class="Apple-converted-space">        </span>setFeedbackType('');</p>
+<p class="p1"><span class="Apple-converted-space">    </span>};</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>// Handles primary color selection</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const handleColorSelect = (color) =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>setFeedbackMessage('');</p>
+<p class="p1"><span class="Apple-converted-space">        </span>setFeedbackType('');</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if (selectedColors.length &lt; 2) {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>setSelectedColors([...selectedColors, color]);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>// Replace the oldest color if two are already selected</p>
+<p class="p1"><span class="Apple-converted-space">            </span>setSelectedColors([selectedColors[1], color]);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>};</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>// Mixes the selected colors</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const handleMixColors = () =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>setFeedbackMessage('');</p>
+<p class="p1"><span class="Apple-converted-space">        </span>setFeedbackType('');</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if (selectedColors.length === 2) {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const [color1, color2] = selectedColors;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const mixKey = `${color1.id}_${color2.id}`;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const result = mixRules[mixKey];</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>if (result) {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>setMixedColor(result);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>setMixedColor({ name: 'Mezcla Desconocida', hex: '#CCCCCC' }); // Default color for non-primary mixes</p>
+<p class="p1"><span class="Apple-converted-space">                </span>setFeedbackMessage('Combina solo dos colores primarios para obtener un color secundario.');</p>
+<p class="p1"><span class="Apple-converted-space">                </span>setFeedbackType('error');</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>setMixedColor(null);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>setFeedbackMessage('Por favor, selecciona dos colores para mezclar.');</p>
+<p class="p1"><span class="Apple-converted-space">            </span>setFeedbackType('error');</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>};</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>// Checks if the mixed color matches the target</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const checkMix = async () =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if (!mixedColor) {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>setFeedbackMessage('Primero, mezcla los colores.');</p>
+<p class="p1"><span class="Apple-converted-space">            </span>setFeedbackType('error');</p>
+<p class="p1"><span class="Apple-converted-space">            </span>return;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>const isCorrect = mixedColor.hex === targetColor.hex;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>if (isCorrect) {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>setFeedbackMessage(`¡Felicidades! Has creado ${mixedColor.name}. ¡Es el color correcto! 🎉`);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>setFeedbackType('success');</p>
+<p class="p1"><span class="Apple-converted-space">        </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>setFeedbackMessage(`Incorrecto. Has creado ${mixedColor.name}. El color objetivo era ${targetColor.name}. Sigue intentando.`);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>setFeedbackType('error');</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// Save the attempt to Firestore</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if (db &amp;&amp; userId &amp;&amp; isAuthReady) {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>try {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>const gameAttemptsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/gameAttempts`);</p>
+<p class="p1"><span class="Apple-converted-space">                </span>await addDoc(gameAttemptsCollectionRef, {</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>userId: userId,</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>targetColor: targetColor.name,</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>mixedColor: mixedColor.name,</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>isCorrect: isCorrect,</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>timestamp: serverTimestamp(),</p>
+<p class="p1"><span class="Apple-converted-space">                </span>});</p>
+<p class="p1"><span class="Apple-converted-space">                </span>console.log("Intento de juego guardado en Firestore.");</p>
+<p class="p1"><span class="Apple-converted-space">            </span>} catch (e) {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>console.error("Error al guardar el intento en Firestore:", e);</p>
+<p class="p1"><span class="Apple-converted-space">                </span>// Show a message to the user if Firestore failed</p>
+<p class="p1"><span class="Apple-converted-space">                </span>setFeedbackMessage(prev =&gt; prev + ' (No se pudo guardar el intento en la base de datos).');</p>
+<p class="p1"><span class="Apple-converted-space">                </span>setFeedbackType('error');</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>console.warn("Firebase or userId are not ready. Cannot save attempt.");</p>
+<p class="p1"><span class="Apple-converted-space">            </span>// Show a message if Firebase is not ready</p>
+<p class="p1"><span class="Apple-converted-space">            </span>if (isAuthReady &amp;&amp; userId) { // If auth is ready but db is not</p>
+<p class="p1"><span class="Apple-converted-space">                </span>setFeedbackMessage(prev =&gt; prev + ' (No se pudo guardar el intento en la base de datos).');</p>
+<p class="p1"><span class="Apple-converted-space">                </span>setFeedbackType('error');</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>};</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>return (</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div className="min-h-screen flex items-center justify-center p-4 bg-f0fdf4 font-inter"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div className="bg-white rounded-3xl shadow-xl p-8 max-w-4xl w-full flex flex-col gap-8"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;h1 className="text-4xl font-bold text-center text-gray-800 mb-4"&gt;🌈 Desafío de Mezcla de Colores 🎨&lt;/h1&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;p className="text-xl text-center text-gray-600 mb-6"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>Tu objetivo es crear el color mostrado. ¡Mezcla los colores primarios y comprueba tu resultado!</p>
+<p class="p1"><span class="Apple-converted-space">                </span>&lt;/p&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">                </span>{!isAuthReady &amp;&amp; (</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>&lt;div className="text-center text-gray-500 text-lg"&gt;Cargando juego...&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>)}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">                </span>{isAuthReady &amp;&amp; (</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>&lt;div className="grid grid-cols-1 lg:grid-cols-2 gap-8"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>{/* Target and Palette Section */}</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>&lt;div className="p-6 bg-gray-50 rounded-2xl shadow-inner flex flex-col items-center justify-center gap-6"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&lt;h2 className="text-2xl font-semibold text-gray-700 mb-4"&gt;Color Objetivo:&lt;/h2&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&lt;div</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>className="w-40 h-40 rounded-2xl border-4 border-green-400 flex items-center justify-center text-2xl font-bold text-white shadow-lg"</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>style={{ backgroundColor: targetColor ? targetColor.hex : '#e2e8f0' }}</p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>{targetColor ? targetColor.name : 'Cargando...'}</p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&lt;h2 className="text-2xl font-semibold text-gray-700 mt-8 mb-4"&gt;Paleta de Pigmentos:&lt;/h2&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&lt;div className="flex flex-wrap gap-4 justify-center"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>{primaryColors.map((color) =&gt; (</p>
+<p class="p1"><span class="Apple-converted-space">                                    </span>&lt;div</p>
+<p class="p1"><span class="Apple-converted-space">                                        </span>key={color.id}</p>
+<p class="p1"><span class="Apple-converted-space">                                        </span>className={`w-16 h-16 rounded-full border-2 border-gray-300 cursor-pointer transition-all duration-200 ease-in-out hover:scale-110 hover:shadow-lg</p>
+<p class="p1"><span class="Apple-converted-space">                                            </span>${selectedColors.some(sc =&gt; sc.id === color.id) ? 'ring-4 ring-green-500' : ''}`}</p>
+<p class="p1"><span class="Apple-converted-space">                                        </span>style={{ backgroundColor: color.hex }}</p>
+<p class="p1"><span class="Apple-converted-space">                                        </span>onClick={() =&gt; handleColorSelect(color)}</p>
+<p class="p1"><span class="Apple-converted-space">                                        </span>title={color.name}</p>
+<p class="p1"><span class="Apple-converted-space">                                    </span>&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>))}</p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">                        </span>{/* Mix and Result Section */}</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>&lt;div className="p-6 bg-gray-50 rounded-2xl shadow-inner flex flex-col items-center justify-center gap-6"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&lt;h2 className="text-2xl font-semibold text-gray-700 mb-4"&gt;Tu Mezcla:&lt;/h2&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&lt;div className="flex gap-4 mb-4"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>&lt;div</p>
+<p class="p1"><span class="Apple-converted-space">                                    </span>className="w-24 h-24 border-2 border-dashed border-gray-400 rounded-lg flex items-center justify-center text-gray-500 font-medium text-sm"</p>
+<p class="p1"><span class="Apple-converted-space">                                    </span>style={{ backgroundColor: selectedColors[0] ? selectedColors[0].hex : 'transparent' }}</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                                    </span>{selectedColors[0] ? '' : '1er Color'}</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>&lt;div</p>
+<p class="p1"><span class="Apple-converted-space">                                    </span>className="w-24 h-24 border-2 border-dashed border-gray-400 rounded-lg flex items-center justify-center text-gray-500 font-medium text-sm"</p>
+<p class="p1"><span class="Apple-converted-space">                                    </span>style={{ backgroundColor: selectedColors[1] ? selectedColors[1].hex : 'transparent' }}</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                                    </span>{selectedColors[1] ? '' : '2do Color'}</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&lt;button</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>className="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-xl shadow-md hover:bg-indigo-700 transition-all duration-300 ease-in-out transform hover:-translate-y-1"</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>onClick={handleMixColors}</p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>¡Mezclar Colores!</p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&lt;/button&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&lt;h2 className="text-2xl font-semibold text-gray-700 mt-8 mb-4"&gt;Color Mezclado Resultante:&lt;/h2&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&lt;div</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>className="w-40 h-40 rounded-2xl border-4 border-emerald-500 shadow-xl"</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>style={{ backgroundColor: mixedColor ? mixedColor.hex : '#e2e8f0' }}</p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&lt;p className="text-xl font-semibold text-gray-800 mt-2"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>{mixedColor ? mixedColor.name : 'Mezcla para ver el resultado'}</p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&lt;/p&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">                            </span>{feedbackMessage &amp;&amp; (</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>&lt;div className={`mt-4 p-4 rounded-xl text-center text-lg font-medium ${</p>
+<p class="p1"><span class="Apple-converted-space">                                    </span>feedbackType === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>}`}&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                                    </span>{feedbackMessage}</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                            </span>)}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&lt;div className="flex gap-4 mt-8"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>&lt;button</p>
+<p class="p1"><span class="Apple-converted-space">                                    </span>className="px-6 py-3 bg-lime-600 text-white font-semibold rounded-xl shadow-md hover:bg-lime-700 transition-all duration-300 ease-in-out transform hover:-translate-y-1"</p>
+<p class="p1"><span class="Apple-converted-space">                                    </span>onClick={checkMix}</p>
+<p class="p1"><span class="Apple-converted-space">                                    </span>disabled={!mixedColor}</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                                    </span>Comprobar Mezcla</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>&lt;button</p>
+<p class="p1"><span class="Apple-converted-space">                                    </span>className="px-6 py-3 bg-cyan-600 text-white font-semibold rounded-xl shadow-md hover:bg-cyan-700 transition-all duration-300 ease-in-out transform hover:-translate-y-1"</p>
+<p class="p1"><span class="Apple-converted-space">                                    </span>onClick={generateNewChallenge}</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                                    </span>Nuevo Desafío</p>
+<p class="p1"><span class="Apple-converted-space">                                </span>&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>)}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">                </span>{/* Display User ID for collaborative identification */}</p>
+<p class="p1"><span class="Apple-converted-space">                </span>{userId &amp;&amp; (</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>&lt;div className="mt-8 text-center text-gray-500 text-sm"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>Tu ID de Usuario (para colaboración): &lt;span className="font-mono bg-gray-100 p-1 rounded"&gt;{userId}&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>)}</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>);</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">export default App;</p>
+</body>
+</html>
